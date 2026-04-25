@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HemoCT AI — Beyin Kanaması Tespit Sistemi</title>
+    <meta name="description" content="Derin öğrenme tabanlı beyin BT görüntülerinden kanama tespiti">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ===== RESET & BASE ===== */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #080c14;
+            --bg-secondary: #0d1320;
+            --bg-card: rgba(15, 23, 42, 0.6);
+            --bg-card-hover: rgba(20, 30, 55, 0.7);
+            --border-subtle: rgba(56, 189, 248, 0.08);
+            --border-glow: rgba(56, 189, 248, 0.25);
+            --accent-cyan: #38bdf8;
+            --accent-teal: #2dd4bf;
+            --accent-blue: #3b82f6;
+            --accent-indigo: #818cf8;
+            --danger: #f43f5e;
+            --danger-glow: rgba(244, 63, 94, 0.3);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.3);
+            --warning: #f59e0b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #475569;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        html { scroll-behavior: smooth; }
+        
+        body {
+            font-family: var(--font-main);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* ===== ANIMATED BACKGROUND ===== */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            z-index: 0;
+        }
+
+        .bg-radial {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse 800px 600px at 50% 0%, rgba(56, 189, 248, 0.06), transparent 70%);
+            z-index: 0;
+        }
+
+        /* Floating orbs */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: float 20s ease-in-out infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .orb-1 {
+            width: 300px; height: 300px;
+            background: var(--accent-cyan);
+            top: -100px; left: -100px;
+            opacity: 0.08;
+            animation-delay: 0s;
+        }
+        .orb-2 {
+            width: 250px; height: 250px;
+            background: var(--accent-indigo);
+            bottom: -50px; right: -50px;
+            opacity: 0.06;
+            animation-delay: -7s;
+        }
+        .orb-3 {
+            width: 200px; height: 200px;
+            background: var(--accent-teal);
+            top: 50%; left: 50%;
+            opacity: 0.04;
+            animation-delay: -14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -30px) scale(1.05); }
+            50% { transform: translate(-20px, 20px) scale(0.95); }
+            75% { transform: translate(20px, 10px) scale(1.02); }
+        }
+
+        /* ===== LAYOUT ===== */
+        .app-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ===== HEADER ===== */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            margin-bottom: 32px;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            position: relative;
+        }
+
+        .logo-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .brain-pulse {
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-cyan);
+            opacity: 0;
+            animation: pulse-ring 3s ease-out infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.6; }
+            100% { transform: scale(1.4); opacity: 0; }
+        }
+
+        .logo-text h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-teal));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-text span {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-weight: 400;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            backdrop-filter: blur(12px);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success-glow);
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            flex: 1;
+        }
+
+        /* ===== GLASS CARD ===== */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            backdrop-filter: blur(16px);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+            opacity: 0.3;
+        }
+
+        .card-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-header-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .card-header-icon.scan { background: rgba(56, 189, 248, 0.1); }
+        .card-header-icon.results { background: rgba(129, 140, 248, 0.1); }
+
+        .card-header h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .card-body {
+            padding: 24px;
+        }
+
+        /* ===== MODEL SELECTOR ===== */
+        .model-selector {
+            display: flex;
+            gap: 8px;
+            padding: 20px 24px 0;
+        }
+
+        .model-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: var(--font-main);
+            font-weight: 500;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .model-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            opacity: 0;
+            transition: var(--transition);
+        }
+
+        .model-btn.active {
+            border-color: var(--accent-cyan);
+            color: var(--text-primary);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .model-btn:hover:not(.active) {
+            border-color: rgba(56, 189, 248, 0.15);
+            color: var(--text-primary);
+        }
+
+        .model-btn span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .model-label {
+            display: block;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            font-weight: 400;
+        }
+
+        /* ===== UPLOAD ZONE ===== */
+        .upload-zone {
+            border: 2px dashed var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.03);
+        }
+
+        .upload-zone.drag-over {
+            border-color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.06);
+            box-shadow: inset 0 0 30px rgba(56, 189, 248, 0.05);
+        }
+
+        .upload-zone.has-image {
+            padding: 12px;
+            border-style: solid;
+            border-color: var(--border-glow);
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: rgba(56, 189, 248, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .upload-zone:hover .upload-icon {
+            background: rgba(56, 189, 248, 0.1);
+            transform: scale(1.05);
+        }
+
+        .upload-icon svg {
+            width: 28px;
+            height: 28px;
+            color: var(--accent-cyan);
+        }
+
+        .upload-text {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .upload-text strong {
+            color: var(--accent-cyan);
+        }
+
+        .upload-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        #fileInput { display: none; }
+
+        /* ===== IMAGE PREVIEW ===== */
+        .image-preview-wrapper {
+            position: relative;
+            width: 100%;
+            display: none;
+        }
+
+        .image-preview-wrapper.visible {
+            display: block;
+        }
+
+        .image-preview {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: contain;
+            border-radius: var(--radius-sm);
+            background: #000;
+        }
+
+        /* Scan line animation */
+        .scan-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+            box-shadow: 0 0 15px var(--accent-cyan), 0 0 30px rgba(56, 189, 248, 0.3);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 2;
+            border-radius: 2px;
+        }
+
+        .scan-line.active {
+            opacity: 1;
+            animation: scan-sweep 1.8s ease-in-out;
+        }
+
+        @keyframes scan-sweep {
+            0% { top: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 95%; opacity: 0; }
+        }
+
+        /* Corner brackets on image */
+        .corner-bracket {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            z-index: 3;
+        }
+        .corner-bracket::before, .corner-bracket::after {
+            content: '';
+            position: absolute;
+            background: var(--accent-cyan);
+            opacity: 0.6;
+        }
+        .corner-bracket.tl { top: 8px; left: 8px; }
+        .corner-bracket.tl::before { width: 20px; height: 2px; top: 0; left: 0; }
+        .corner-bracket.tl::after { width: 2px; height: 20px; top: 0; left: 0; }
+        .corner-bracket.tr { top: 8px; right: 8px; }
+        .corner-bracket.tr::before { width: 20px; height: 2px; top: 0; right: 0; }
+        .corner-bracket.tr::after { width: 2px; height: 20px; top: 0; right: 0; }
+        .corner-bracket.bl { bottom: 8px; left: 8px; }
+        .corner-bracket.bl::before { width: 20px; height: 2px; bottom: 0; left: 0; }
+        .corner-bracket.bl::after { width: 2px; height: 20px; bottom: 0; left: 0; }
+        .corner-bracket.br { bottom: 8px; right: 8px; }
+        .corner-bracket.br::before { width: 20px; height: 2px; bottom: 0; right: 0; }
+        .corner-bracket.br::after { width: 2px; height: 20px; bottom: 0; right: 0; }
+
+        /* Remove image button */
+        .remove-image {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 5;
+            transition: var(--transition);
+            font-size: 1.1rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .remove-image:hover {
+            background: var(--danger);
+            color: white;
+            border-color: var(--danger);
+        }
+
+        /* ===== ANALYZE BUTTON ===== */
+        .analyze-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+            margin-top: 16px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            color: white;
+            letter-spacing: 0.5px;
+        }
+
+        .analyze-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(56, 189, 248, 0.25);
+        }
+
+        .analyze-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .analyze-btn .btn-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .reload-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            border: 1px solid var(--border-glow);
+            border-radius: var(--radius-sm);
+            background: rgba(56, 189, 248, 0.08);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-weight: 600;
+            font-size: 0.86rem;
+            cursor: pointer;
+            transition: var(--transition);
+            display: none;
+        }
+
+        .reload-btn.visible {
+            display: block;
+        }
+
+        .reload-btn:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.14);
+        }
+
+        /* Loading spinner */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: none;
+        }
+
+        .analyze-btn.loading .spinner { display: block; }
+        .analyze-btn.loading .btn-label { display: none; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ===== RIGHT PANEL — RESULTS ===== */
+        .results-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ===== RESULT DISPLAY ===== */
+        .result-card {
+            display: none;
+        }
+
+        .result-card.visible {
+            display: block;
+            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-verdict {
+            text-align: center;
+            padding: 32px 24px;
+        }
+
+        .verdict-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            position: relative;
+        }
+
+        .verdict-icon::after {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px solid;
+            opacity: 0.3;
+            animation: pulse-ring 2s ease-out infinite;
+        }
+
+        .result-card.hemorrhage .verdict-icon {
+            background: rgba(244, 63, 94, 0.12);
+        }
+        .result-card.hemorrhage .verdict-icon::after {
+            border-color: var(--danger);
+        }
+
+        .result-card.normal .verdict-icon {
+            background: rgba(16, 185, 129, 0.12);
+        }
+        .result-card.normal .verdict-icon::after {
+            border-color: var(--success);
+        }
+
+        .verdict-label {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+        }
+
+        .result-card.hemorrhage .verdict-label {
+            color: var(--danger);
+        }
+        .result-card.normal .verdict-label {
+            color: var(--success);
+        }
+
+        .verdict-sublabel {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        /* ===== CONFIDENCE METER ===== */
+        .confidence-section {
+            padding: 20px 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .confidence-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 12px;
+        }
+
+        .confidence-title {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 500;
+        }
+
+        .confidence-value {
+            font-family: var(--font-mono);
+            font-size: 1.6rem;
+            font-weight: 700;
+        }
+
+        .result-card.hemorrhage .confidence-value { color: var(--danger); }
+        .result-card.normal .confidence-value { color: var(--success); }
+
+        .confidence-bar-track {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 100px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .confidence-bar-fill {
+            height: 100%;
+            border-radius: 100px;
+            transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+        }
+
+        .result-card.hemorrhage .confidence-bar-fill {
+            background: linear-gradient(90deg, var(--danger), #fb7185);
+            box-shadow: 0 0 12px var(--danger-glow);
+        }
+        .result-card.normal .confidence-bar-fill {
+            background: linear-gradient(90deg, var(--success), #34d399);
+            box-shadow: 0 0 12px var(--success-glow);
+        }
+
+        /* ===== DETAILS GRID ===== */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            padding: 20px 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .detail-item {
+            padding: 14px;
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .detail-label {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .detail-value {
+            font-size: 0.88rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 24px;
+            text-align: center;
+        }
+
+        .empty-state-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: rgba(56, 189, 248, 0.04);
+            border: 1px dashed var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-icon svg {
+            width: 32px;
+            height: 32px;
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .empty-state p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* ===== HISTORY / INFO SECTION ===== */
+        .info-card {
+            margin-top: auto;
+        }
+
+        .info-items {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px 24px;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.015);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+            transition: var(--transition);
+        }
+
+        .info-item:hover {
+            background: rgba(255,255,255,0.03);
+            border-color: var(--border-glow);
+        }
+
+        .info-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .info-dot.cyan { background: var(--accent-cyan); }
+        .info-dot.teal { background: var(--accent-teal); }
+        .info-dot.indigo { background: var(--accent-indigo); }
+
+        .info-text {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+
+        .info-text strong {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* ===== ECG LINE (bottom decoration) ===== */
+        .ecg-container {
+            width: 100%;
+            height: 40px;
+            margin-top: 32px;
+            opacity: 0.15;
+        }
+
+        .ecg-container svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .ecg-path {
+            stroke: var(--accent-cyan);
+            stroke-width: 1.5;
+            fill: none;
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw-ecg 4s linear infinite;
+        }
+
+        @keyframes draw-ecg {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 860px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== TOAST NOTIFICATION ===== */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 14px 20px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(16px);
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: var(--transition);
+            z-index: 100;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            border-color: rgba(244, 63, 94, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Background effects -->
+    <div class="bg-grid"></div>
+    <div class="bg-radial"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <div class="brain-pulse"></div>
+                    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="24" cy="24" r="20" stroke="url(#grad1)" stroke-width="2" fill="rgba(56,189,248,0.05)"/>
+                        <path d="M24 12 C18 12, 14 16, 14 20 C14 22, 15 24, 16 25 C14 26, 13 28, 13 30 C13 34, 16 36, 20 36 C22 36, 23 35, 24 34 C25 35, 26 36, 28 36 C32 36, 35 34, 35 30 C35 28, 34 26, 32 25 C33 24, 34 22, 34 20 C34 16, 30 12, 24 12Z" fill="url(#grad2)" opacity="0.7"/>
+                        <path d="M24 16 L24 32" stroke="rgba(56,189,248,0.4)" stroke-width="1" stroke-dasharray="2,2"/>
+                        <circle cx="20" cy="22" r="2" fill="rgba(56,189,248,0.3)"/>
+                        <circle cx="28" cy="22" r="2" fill="rgba(56,189,248,0.3)"/>
+                        <circle cx="24" cy="28" r="1.5" fill="rgba(56,189,248,0.3)"/>
+                        <defs>
+                            <linearGradient id="grad1" x1="4" y1="4" x2="44" y2="44">
+                                <stop offset="0%" stop-color="#38bdf8"/>
+                                <stop offset="100%" stop-color="#2dd4bf"/>
+                            </linearGradient>
+                            <linearGradient id="grad2" x1="13" y1="12" x2="35" y2="36">
+                                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3"/>
+                                <stop offset="100%" stop-color="#818cf8" stop-opacity="0.2"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>HemoCT AI</h1>
+                    <span>Beyin Kanaması Tespit Sistemi</span>
+                </div>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                Sistem Aktif
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <main class="main-content">
+            <!-- LEFT: Upload & Scan Panel -->
+            <div class="left-panel">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <h2>BT Görüntüsü Yükle</h2>
+                    </div>
+
+                    <!-- Model Selector -->
+                    <div class="model-selector">
+                        <button class="model-btn active" data-model="custom" onclick="selectModel('custom', this)">
+                            <span>Özgün CNN</span>
+                            <span class="model-label">HemoCTNet</span>
+                        </button>
+                        <button class="model-btn" data-model="pretrained" onclick="selectModel('pretrained', this)">
+                            <span>ResNet50</span>
+                            <span class="model-label">Pre-trained</span>
+                        </button>
+                    </div>
+
+                    <div class="card-body">
+                        <!-- Upload Zone -->
+                        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                            <div class="upload-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                            </div>
+                            <p class="upload-text"><strong>Tıkla</strong> veya <strong>sürükle bırak</strong></p>
+                            <p class="upload-hint">PNG, JPG, DICOM — Maks. 10MB</p>
+                        </div>
+
+                        <!-- Image Preview (hidden initially) -->
+                        <div class="image-preview-wrapper" id="previewWrapper">
+                            <div class="corner-bracket tl"></div>
+                            <div class="corner-bracket tr"></div>
+                            <div class="corner-bracket bl"></div>
+                            <div class="corner-bracket br"></div>
+                            <div class="scan-line" id="scanLine"></div>
+                            <button class="remove-image" onclick="removeImage(event)" title="Görüntüyü kaldır">×</button>
+                            <img id="imagePreview" class="image-preview" alt="BT Görüntüsü">
+                        </div>
+
+                        <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+
+                        <button class="analyze-btn" id="analyzeBtn" disabled onclick="analyzeImage()">
+                            <div class="btn-content">
+                                <div class="spinner"></div>
+                                <span class="btn-label">⚡ Analiz Et</span>
+                            </div>
+                        </button>
+
+                        <button class="reload-btn" id="reloadBtn" onclick="loadAnotherPicture()">↻ Başka Görsel Yükle</button>
+                    </div>
+                </div>
+
+                <!-- Info Card -->
+                <div class="glass-card info-card" style="margin-top: 20px;">
+                    <div class="info-items">
+                        <div class="info-item">
+                            <div class="info-dot cyan"></div>
+                            <span class="info-text"><strong>Giriş Boyutu:</strong> 320 × 320 px</span>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-dot teal"></div>
+                            <span class="info-text"><strong>Sınıflar:</strong> Normal / Hemorrhage</span>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-dot indigo"></div>
+                            <span class="info-text"><strong>Veri Seti:</strong> Head CT — 200 görüntü</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Results Panel -->
+            <div class="results-panel">
+                <!-- Empty State (shown when no result) -->
+                <div class="glass-card" id="emptyState">
+                    <div class="card-header">
+                        <h2>Analiz Sonucu</h2>
+                    </div>
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 6v6l4 2"/>
+                            </svg>
+                        </div>
+                        <h3>Analiz Bekleniyor</h3>
+                        <p>Bir BT görüntüsü yükleyin ve analiz edin</p>
+                    </div>
+                </div>
+
+                <!-- Result Card (hidden initially) -->
+                <div class="glass-card result-card" id="resultCard">
+                    <div class="card-header">
+                        <h2>Analiz Sonucu</h2>
+                    </div>
+
+                    <div class="result-verdict">
+                        <div class="verdict-icon" id="verdictIcon"></div>
+                        <div class="verdict-label" id="verdictLabel"></div>
+                        <div class="verdict-sublabel" id="verdictSublabel"></div>
+                    </div>
+
+                    <div class="confidence-section">
+                        <div class="confidence-header">
+                            <span class="confidence-title">Güven Skoru</span>
+                            <span class="confidence-value" id="confidenceValue">—</span>
+                        </div>
+                        <div class="confidence-bar-track">
+                            <div class="confidence-bar-fill" id="confidenceBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Model</div>
+                            <div class="detail-value" id="detailModel">—</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Sınıf</div>
+                            <div class="detail-value" id="detailClass">—</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">İşlem Süresi</div>
+                            <div class="detail-value" id="detailTime">—</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Giriş Boyutu</div>
+                            <div class="detail-value">320 × 320</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ECG decoration -->
+                <div class="ecg-container">
+                    <svg viewBox="0 0 600 40" preserveAspectRatio="none">
+                        <path class="ecg-path" d="M0,20 L50,20 L60,20 L70,8 L80,32 L90,5 L100,35 L110,20 L130,20 L180,20 L190,20 L200,8 L210,32 L220,5 L230,35 L240,20 L260,20 L310,20 L320,20 L330,8 L340,32 L350,5 L360,35 L370,20 L390,20 L440,20 L450,20 L460,8 L470,32 L480,5 L490,35 L500,20 L520,20 L600,20"/>
+                    </svg>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ===== STATE =====
+        let selectedModel = 'custom';
+        let selectedFile = null;
+
+        // ===== MODEL SELECTOR =====
+        function selectModel(model, btn) {
+            selectedModel = model;
+            document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        // ===== FILE HANDLING =====
+        const uploadZone = document.getElementById('uploadZone');
+        const previewWrapper = document.getElementById('previewWrapper');
+        const imagePreview = document.getElementById('imagePreview');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const reloadBtn = document.getElementById('reloadBtn');
+
+        // Drag & Drop
+        uploadZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            uploadZone.classList.add('drag-over');
+        });
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('drag-over');
+        });
+        uploadZone.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadZone.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) processFile(files[0]);
+        });
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        }
+
+        function processFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('Lütfen bir görüntü dosyası seçin', true);
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('Dosya boyutu 10MB\'dan küçük olmalı', true);
+                return;
+            }
+
+            selectedFile = file;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                uploadZone.style.display = 'none';
+                previewWrapper.classList.add('visible');
+                analyzeBtn.disabled = false;
+                reloadBtn.classList.add('visible');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage(e) {
+            if (e) e.stopPropagation();
+            selectedFile = null;
+            imagePreview.src = '';
+            previewWrapper.classList.remove('visible');
+            uploadZone.style.display = '';
+            analyzeBtn.disabled = true;
+            reloadBtn.classList.remove('visible');
+            document.getElementById('fileInput').value = '';
+            // Hide results
+            document.getElementById('resultCard').classList.remove('visible', 'hemorrhage', 'normal');
+            document.getElementById('emptyState').style.display = '';
+        }
+
+        function loadAnotherPicture() {
+            removeImage();
+            document.getElementById('fileInput').click();
+        }
+
+        // ===== ANALYZE =====
+        async function analyzeImage() {
+            if (!selectedFile) return;
+
+            const btn = analyzeBtn;
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            // Trigger scan animation
+            const scanLine = document.getElementById('scanLine');
+            scanLine.classList.remove('active');
+            void scanLine.offsetWidth; // reflow
+            scanLine.classList.add('active');
+
+            const startTime = performance.now();
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('model', selectedModel);
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+
+                if (data.error) {
+                    showToast(data.error, true);
+                    return;
+                }
+
+                displayResult(data, elapsed);
+            } catch (err) {
+                showToast('Sunucu bağlantı hatası', true);
+                console.error(err);
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        // ===== DISPLAY RESULT =====
+        function displayResult(data, elapsed) {
+            const resultCard = document.getElementById('resultCard');
+            const emptyState = document.getElementById('emptyState');
+            const isHemorrhage = data.prediction === 'hemorrhage';
+
+            // Hide empty, show result
+            emptyState.style.display = 'none';
+            resultCard.classList.remove('hemorrhage', 'normal', 'visible');
+            void resultCard.offsetWidth;
+
+            resultCard.classList.add(isHemorrhage ? 'hemorrhage' : 'normal');
+            resultCard.classList.add('visible');
+
+            // Icon
+            document.getElementById('verdictIcon').textContent = isHemorrhage ? '⚠️' : '✅';
+
+            // Label
+            document.getElementById('verdictLabel').textContent = 
+                isHemorrhage ? 'KANAMA TESPİT EDİLDİ' : 'KANAMA TESPİT EDİLMEDİ';
+
+            document.getElementById('verdictSublabel').textContent = 
+                isHemorrhage ? 'Beyin BT görüntüsünde hemoraji bulgusu saptandı' : 'Beyin BT görüntüsünde hemoraji bulgusu saptanmadı';
+
+            // Confidence
+            document.getElementById('confidenceValue').textContent = `%${data.confidence}`;
+            setTimeout(() => {
+                document.getElementById('confidenceBar').style.width = `${data.confidence}%`;
+            }, 100);
+
+            // Details
+            document.getElementById('detailModel').textContent = data.model_used;
+            document.getElementById('detailClass').textContent = isHemorrhage ? 'Hemorrhage' : 'Normal';
+            document.getElementById('detailTime').textContent = `${elapsed}s`;
+        }
+
+        // ===== TOAST =====
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3500);
+        }
+    </script>
+</body>
+</html>
